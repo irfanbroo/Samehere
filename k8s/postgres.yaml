@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: samehere-pg-pvc
+  namespace: ns-ts2raneh
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: samehere-pg
+  namespace: ns-ts2raneh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: samehere-pg
+  template:
+    metadata:
+      labels:
+        app: samehere-pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_DB
+              value: samehere
+            - name: POSTGRES_USER
+              value: samehere
+            - name: POSTGRES_PASSWORD
+              value: samehere123
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: pg-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: pg-data
+          persistentVolumeClaim:
+            claimName: samehere-pg-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: samehere-pg
+  namespace: ns-ts2raneh
+spec:
+  selector:
+    app: samehere-pg
+  ports:
+    - port: 5432
+      targetPort: 5432

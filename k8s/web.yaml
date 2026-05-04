@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: samehere-web
+  namespace: ns-ts2raneh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: samehere-web
+  template:
+    metadata:
+      labels:
+        app: samehere-web
+    spec:
+      containers:
+        - name: samehere-web
+          image: docker.io/ir7fan/samehere-web:latest
+          ports:
+            - containerPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: samehere-web
+  namespace: ns-ts2raneh
+spec:
+  selector:
+    app: samehere-web
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: samehere-web-ingress
+  namespace: ns-ts2raneh
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    nginx.ingress.kubernetes.io/proxy-body-size: 32m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+    - host: samehere-web-ts2raneh.usw-1.sealos.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: samehere-web
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - samehere-web-ts2raneh.usw-1.sealos.app
+      secretName: wildcard-cert

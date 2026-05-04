@@ -1,0 +1,89 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme inline {
+  --color-destructive-foreground: var(--destructive-foreground);
+}
+
+* { box-sizing: border-box; }
+
+:root {
+  --radius: 1rem;
+  --background: oklch(0.125 0 0);
+  --foreground: oklch(0.985 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.229 0 0);
+  --border: oklch(0.25 0 0);
+  --input: oklch(0.25 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.125 0 0);
+  --secondary: oklch(0.2 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.55 0.22 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.5 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  margin: 0;
+  font-size: 17px;
+}
+
+@media (min-width: 768px) {
+  body { font-size: 18px; }
+}
+
+input, textarea { outline: none; }
+
+@keyframes heart-burst {
+  0%   { transform: scale(0); opacity: 0; }
+  15%  { transform: scale(1.3); opacity: 1; }
+  30%  { transform: scale(0.95); opacity: 1; }
+  45%  { transform: scale(1.05); opacity: 1; }
+  60%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+@keyframes heart-ring {
+  0%   { transform: scale(0); opacity: 1; border-width: 8px; }
+  50%  { transform: scale(1.8); opacity: 0.5; border-width: 2px; }
+  100% { transform: scale(2.5); opacity: 0; border-width: 0px; }
+}
+
+@keyframes sparkle {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+}
+
+@keyframes icon-bounce {
+  0%   { transform: scale(1); }
+  25%  { transform: scale(1.4); }
+  50%  { transform: scale(0.85); }
+  75%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes heart-bounce {
+  0%   { transform: scale(1); }
+  15%  { transform: scale(0.75); }
+  50%  { transform: scale(1.4); }
+  70%  { transform: scale(0.92); }
+  85%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes dot-out {
+  0%   { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 1; }
+  100% { transform: translate(calc(var(--dx) * 2.5), calc(var(--dy) * 2.5)) scale(0); opacity: 0; }
+}
+
+.like-bounce {
+  animation: heart-bounce 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #222; border-radius: 3px; }

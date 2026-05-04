@@ -1,0 +1,85 @@
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  bio TEXT,
+  tags TEXT[] DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS entries (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  mood VARCHAR(50),
+  tags TEXT[] DEFAULT '{}',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS likes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  entry_id INTEGER REFERENCES entries(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, entry_id)
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  entry_id INTEGER REFERENCES entries(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id SERIAL PRIMARY KEY,
+  sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  receiver_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS todos (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  due_date DATE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE todos ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE todos ADD COLUMN IF NOT EXISTS priority VARCHAR(10) DEFAULT 'medium';
+ALTER TABLE todos ADD COLUMN IF NOT EXISTS time_slot VARCHAR(10) DEFAULT 'morning';
+
+CREATE TABLE IF NOT EXISTS truths (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+ALTER TABLE truths ADD COLUMN IF NOT EXISTS resolution TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS user_code VARCHAR(8);
+CREATE UNIQUE INDEX IF NOT EXISTS users_user_code_unique ON users(user_code);
+-- Backfill existing users with random codes (mixed case + numbers)
+UPDATE users SET user_code = SUBSTR(MD5(RANDOM()::TEXT || id::TEXT), 1, 6) WHERE user_code IS NULL;
+
+CREATE TABLE IF NOT EXISTS diary (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT,
+  mood TEXT,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS follows (
+  id SERIAL PRIMARY KEY,
+  follower_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  following_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(follower_id, following_id)
+);

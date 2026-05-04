@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: samehere-ws
+  namespace: ns-ts2raneh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: samehere-ws
+  template:
+    metadata:
+      labels:
+        app: samehere-ws
+    spec:
+      containers:
+        - name: samehere-ws
+          image: docker.io/ir7fan/samehere-ws:latest
+          ports:
+            - containerPort: 3001
+          env:
+            - name: JWT_SECRET
+              value: samehere_jwt_secret_change_me
+            - name: PORT
+              value: "3001"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: samehere-ws
+  namespace: ns-ts2raneh
+spec:
+  selector:
+    app: samehere-ws
+  ports:
+    - port: 80
+      targetPort: 3001
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: samehere-ws-ingress
+  namespace: ns-ts2raneh
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+spec:
+  rules:
+    - host: samehere-ws-ts2raneh.usw-1.sealos.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: samehere-ws
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - samehere-ws-ts2raneh.usw-1.sealos.app
+      secretName: wildcard-cert
