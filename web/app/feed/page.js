@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { motion, AnimatePresence, useSpring, useMotionValue, useTransform } from 'framer-motion';
 import api from '@/lib/api';
 import { getUser } from '@/lib/auth';
 import AppShell from '@/components/AppShell';
@@ -9,6 +10,28 @@ import RightPanel from '@/components/RightPanel';
 import Avatar from '@/components/Avatar';
 import LikeButton from '@/components/LikeButton';
 import { useIsMobile } from '@/lib/useIsMobile';
+
+// ── animation variants ──────────────────────────────────────
+const cardVariants = {
+  hidden:  { opacity: 0, y: 24, scale: 0.98 },
+  visible: { opacity: 1, y: 0,  scale: 1,    transition: { duration: 0.38, ease: [0.22, 1, 0.36, 1] } },
+  exit:    { opacity: 0, y: -12, scale: 0.97, transition: { duration: 0.2 } },
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.05 } },
+};
+
+const fadeUp = {
+  hidden:  { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+};
+
+const fadeIn = {
+  hidden:  { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } },
+};
 
 const MOOD_COLORS = {
   'grinding': '#f59e0b', 'frustrated': '#ef4444', 'chill': '#22d3ee',
@@ -39,7 +62,12 @@ function EntryCard({ entry, onLike, onDelete, onEdit, currentUserId }) {
   const [draft, setDraft] = useState(entry.content);
   const [draftTags, setDraftTags] = useState(entry.tags || []);
   const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const ALL_TAGS = ['#study', '#gym', '#coding', '#work', '#art', '#music', '#gaming', '#nocturnal', '#grind', '#reading', '#cooking', '#fitness', '#sleep', '#earlybird', '#introverted', '#extroverted', '#traveler', '#selfcare', '#sports', '#content', '#poetry', '#drawing', '#photography', '#writing', '#anime', '#foodie', '#linux', '#student', '#college', '#highschool', '#parenting', '#nightowl'];
+  const CONTENT_LIMIT = 220;
+  const isLong = entry.content.length > CONTENT_LIMIT;
+  const moodColor = entry.mood ? MOOD_COLORS[entry.mood] : null;
 
   function toggleTag(tag) { setDraftTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]); }
 
@@ -52,111 +80,194 @@ function EntryCard({ entry, onLike, onDelete, onEdit, currentUserId }) {
   }
 
   return (
-    <div style={{
-      background: 'var(--bg-card, #0f0f0f)', borderRadius: 16,
-      border: '1px solid #1a1a1a',
-      marginBottom: 16, overflow: 'hidden',
-      transition: 'border-color 0.2s',
-      cursor: 'pointer',
-    }}
-    onMouseEnter={e => e.currentTarget.style.borderColor = '#2a2a2a'}
-    onMouseLeave={e => e.currentTarget.style.borderColor = '#1a1a1a'}
+    <motion.div
+      layout
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      whileHover={{ y: -3, transition: { type: 'spring', stiffness: 400, damping: 28 } }}
+      onHoverStart={() => setHovered(true)}
+      onHoverEnd={() => setHovered(false)}
+      style={{
+        background: '#0d0d14',
+        borderRadius: 20,
+        border: `1px solid ${hovered
+          ? (moodColor ? `${moodColor}40` : 'rgba(124,58,237,0.3)')
+          : (moodColor ? `${moodColor}18` : 'rgba(124,58,237,0.1)')}`,
+        marginBottom: 10,
+        overflow: 'hidden',
+        willChange: 'transform',
+        position: 'relative',
+        transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
+        boxShadow: hovered
+          ? (moodColor ? `0 8px 40px ${moodColor}14, 0 2px 12px rgba(0,0,0,0.4)` : '0 8px 40px rgba(124,58,237,0.12), 0 2px 12px rgba(0,0,0,0.4)')
+          : '0 1px 4px rgba(0,0,0,0.3)',
+      }}
     >
+      {/* mood accent left bar */}
+      {moodColor && (
+        <motion.div
+          initial={{ scaleY: 0, opacity: 0 }}
+          animate={{ scaleY: 1, opacity: 1 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+            background: `linear-gradient(180deg, ${moodColor}ee 0%, ${moodColor}33 100%)`,
+            borderRadius: '20px 0 0 20px',
+            transformOrigin: 'top',
+          }}
+        />
+      )}
+
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 0' }}>
-        <Link href={`/profile/${entry.user_id}`} style={{ textDecoration: 'none' }}>
-          <Avatar username={entry.username} profilePic={entry.profile_pic} size={36} radius={12} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingLeft: moodColor ? 20 : 16 }}>
+        <Link href={`/profile/${entry.user_id}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
+          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
+            <Avatar username={entry.username} profilePic={entry.profile_pic} size={36} radius={12} />
+          </motion.div>
         </Link>
-        <div style={{ flex: 1 }}>
-          <Link href={`/profile/${entry.user_id}`} style={{ color: '#fff', fontWeight: 600, fontSize: 15, textDecoration: 'none' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Link href={`/profile/${entry.user_id}`} style={{ color: '#e2e8f0', fontWeight: 600, fontSize: 14, textDecoration: 'none', display: 'block', lineHeight: 1.3 }}>
             {entry.username}
           </Link>
-          <p style={{ color: 'var(--secondary-text-color, #9CA3AF)', fontSize: 12, margin: 0 }}>{timeAgo(entry.created_at)}</p>
+          <span style={{ color: '#334155', fontSize: 11, letterSpacing: '0.01em' }}>{timeAgo(entry.created_at)}</span>
         </div>
-        {entry.mood && (
-          <span style={{
-            background: '#161616', borderRadius: 20, padding: '3px 10px',
-            fontSize: 11, color: '#888', border: '1px solid #1e1e1e',
-          }}>{entry.mood}</span>
+        {moodColor && (
+          <motion.span
+            initial={{ opacity: 0, scale: 0.75, x: 8 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            transition={{ delay: 0.12, type: 'spring', stiffness: 300, damping: 22 }}
+            style={{
+              background: `${moodColor}12`, color: moodColor,
+              border: `1px solid ${moodColor}28`,
+              borderRadius: 20, padding: '3px 10px',
+              fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', textTransform: 'capitalize',
+            }}
+          >{entry.mood}</motion.span>
         )}
       </div>
 
       {/* Content */}
-      <div style={{ padding: '12px 16px' }}>
+      <motion.div layout style={{ padding: '0 16px 12px', paddingLeft: moodColor ? 20 : 16 }}>
         {editing ? (
-          <>
+          <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
             <textarea value={draft} onChange={e => setDraft(e.target.value)} autoFocus
-              style={{ width: '100%', minHeight: 100, background: '#0a0a0a', color: '#fff', border: '1px solid #2a2a2a', borderRadius: 12, padding: 12, fontSize: 14, lineHeight: 1.6, resize: 'vertical', fontFamily: 'inherit' }} />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '10px 0' }}>
+              style={{ width: '100%', minHeight: 100, background: 'rgba(124,58,237,0.05)', color: '#e2e8f0', border: '1px solid rgba(124,58,237,0.25)', borderRadius: 12, padding: 12, fontSize: 14, lineHeight: 1.75, resize: 'vertical', fontFamily: 'inherit', outline: 'none', transition: 'border-color 0.2s, box-shadow 0.2s', boxSizing: 'border-box' }}
+              onFocus={e => { e.target.style.borderColor = 'rgba(124,58,237,0.6)'; e.target.style.boxShadow = '0 0 0 3px rgba(124,58,237,0.08)'; }}
+              onBlur={e => { e.target.style.borderColor = 'rgba(124,58,237,0.25)'; e.target.style.boxShadow = 'none'; }}
+            />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, margin: '10px 0' }}>
               {ALL_TAGS.map(tag => (
-                <button key={tag} type="button" onClick={() => toggleTag(tag)} style={{
-                  border: `1px solid ${draftTags.includes(tag) ? '#fff' : '#2a2a2a'}`,
-                  background: draftTags.includes(tag) ? '#fff' : 'transparent',
-                  color: draftTags.includes(tag) ? '#000' : '#555',
-                  borderRadius: 20, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
-                  fontWeight: draftTags.includes(tag) ? 600 : 400,
-                }}>{tag}</button>
+                <motion.button key={tag} type="button" onClick={() => toggleTag(tag)}
+                  whileTap={{ scale: 0.9 }}
+                  style={{
+                    border: `1px solid ${draftTags.includes(tag) ? 'rgba(124,58,237,0.6)' : 'rgba(255,255,255,0.06)'}`,
+                    background: draftTags.includes(tag) ? 'rgba(124,58,237,0.2)' : 'transparent',
+                    color: draftTags.includes(tag) ? '#a78bfa' : '#475569',
+                    borderRadius: 20, padding: '3px 10px', fontSize: 11, cursor: 'pointer',
+                    fontWeight: draftTags.includes(tag) ? 600 : 400, transition: 'all 0.15s',
+                  }}>{tag}</motion.button>
               ))}
             </div>
-          </>
+          </motion.div>
         ) : (
           <Link href={`/entry/${entry.id}`} style={{ textDecoration: 'none' }}>
-            <p style={{ color: '#bbb', fontSize: 15, lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{entry.content}</p>
+            <motion.p layout style={{ color: '#94a3b8', fontSize: 15, lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>
+              {isLong && !expanded ? entry.content.slice(0, CONTENT_LIMIT) + '…' : entry.content}
+            </motion.p>
+            {isLong && (
+              <motion.button
+                onClick={e => { e.preventDefault(); e.stopPropagation(); setExpanded(p => !p); }}
+                whileTap={{ scale: 0.95 }}
+                style={{ background: 'none', border: 'none', color: '#6d28d9', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '5px 0 0', letterSpacing: '0.01em', display: 'flex', alignItems: 'center', gap: 4, transition: 'color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.color = '#a78bfa'}
+                onMouseLeave={e => e.currentTarget.style.color = '#6d28d9'}
+              >
+                <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.3, ease: [0.22,1,0.36,1] }} style={{ display: 'inline-block', lineHeight: 1 }}>↓</motion.span>
+                {expanded ? 'Show less' : 'Read more'}
+              </motion.button>
+            )}
           </Link>
         )}
-      </div>
+      </motion.div>
 
       {/* Tags */}
-      {!editing && entry.tags?.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '0 16px 10px' }}>
-          {entry.tags.map(t => (
-            <span key={t} style={{ background: '#141414', color: 'var(--secondary-text-color, #9CA3AF)', borderRadius: 20, padding: '2px 9px', fontSize: 11, border: '1px solid #1a1a1a' }}>{t}</span>
-          ))}
-        </div>
-      )}
+      <AnimatePresence>
+        {!editing && entry.tags?.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '0 16px 12px', paddingLeft: moodColor ? 20 : 16 }}
+          >
+            {entry.tags.map((t, i) => (
+              <motion.span
+                key={t}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.04, type: 'spring', stiffness: 300, damping: 22 }}
+                whileHover={{ scale: 1.08, color: '#a78bfa' }}
+                style={{
+                  background: 'rgba(124,58,237,0.06)', color: '#334155',
+                  borderRadius: 20, padding: '2px 9px', fontSize: 11,
+                  border: '1px solid rgba(124,58,237,0.1)',
+                  fontWeight: 500, letterSpacing: '0.01em', cursor: 'default', display: 'inline-block',
+                  transition: 'color 0.15s, border-color 0.15s, background 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#a78bfa'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.3)'; e.currentTarget.style.background = 'rgba(124,58,237,0.1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#334155'; e.currentTarget.style.borderColor = 'rgba(124,58,237,0.1)'; e.currentTarget.style.background = 'rgba(124,58,237,0.06)'; }}
+              >{t}</motion.span>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', borderTop: '1px solid #141414' }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 16px 12px', paddingLeft: moodColor ? 20 : 16, borderTop: '1px solid rgba(255,255,255,0.03)', gap: 2 }}>
         {!editing ? (
           <>
             <LikeButton liked={entry.liked} count={entry.likes_count} onLike={() => onLike(entry.id)} />
-            <Link href={`/entry/${entry.id}`} style={{ color: 'var(--secondary-text-color, #9CA3AF)', fontSize: 14, textDecoration: 'none', marginLeft: 14, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <Link href={`/entry/${entry.id}`} style={{
+              color: '#334155', fontSize: 13, textDecoration: 'none', marginLeft: 10,
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 9px', borderRadius: 9,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = '#a78bfa'; e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = '#334155'; e.currentTarget.style.background = 'transparent'; }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>
-              {entry.comments_count}
+              <span style={{ fontWeight: 500 }}>{entry.comments_count}</span>
             </Link>
             {isOwn && (
-              <button onClick={() => { setDraft(entry.content); setDraftTags(entry.tags || []); setEditing(true); }} style={{
-                marginLeft: 'auto', background: '#111', border: '1px solid #1e1e1e',
-                cursor: 'pointer', color: 'var(--secondary-text-color, #9CA3AF)', borderRadius: 8,
-                padding: '4px 8px', display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 11, fontWeight: 500,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#444'; e.currentTarget.style.color = '#aaa'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.color = '#555'; }}
+              <motion.button
+                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.94 }}
+                onClick={() => { setDraft(entry.content); setDraftTags(entry.tags || []); setEditing(true); }}
+                style={{ marginLeft: 'auto', background: 'transparent', border: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', color: '#334155', borderRadius: 9, padding: '5px 11px', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(124,58,237,0.35)'; e.currentTarget.style.color = '#a78bfa'; e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#334155'; e.currentTarget.style.background = 'transparent'; }}
               >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                 </svg>
                 Edit
-              </button>
+              </motion.button>
             )}
           </>
         ) : (
-          <>
-            <button onClick={() => onDelete(entry.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ff4d4d', fontSize: 12, padding: 0 }}>Delete</button>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ display: 'flex', width: '100%', alignItems: 'center' }}>
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => onDelete(entry.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f43f5e', fontSize: 12, padding: 0, fontWeight: 600 }}>Delete</motion.button>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <button onClick={() => setEditing(false)} style={{ background: 'none', border: '1px solid #222', color: '#666', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontSize: 12 }}>Cancel</button>
-              <button onClick={handleSave} disabled={saving} style={{ background: '#fff', border: 'none', color: '#000', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
-                {saving ? '...' : 'Save'}
-              </button>
+              <motion.button whileTap={{ scale: 0.96 }} onClick={() => setEditing(false)} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', color: '#475569', borderRadius: 9, padding: '5px 12px', cursor: 'pointer', fontSize: 12, fontWeight: 500 }}>Cancel</motion.button>
+              <motion.button whileTap={{ scale: 0.96 }} onClick={handleSave} disabled={saving} style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', border: 'none', color: '#fff', borderRadius: 9, padding: '5px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 12, boxShadow: '0 2px 12px rgba(109,40,217,0.3)' }}>
+                {saving ? '…' : 'Save'}
+              </motion.button>
             </div>
-          </>
+          </motion.div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -510,10 +621,14 @@ export default function FeedPage() {
     <AppShell rightPanel={<RightPanel />}>
         <style>{`
           @keyframes linePulse {
-            0%, 100% { opacity: 0.4; box-shadow: 0 0 6px 1px rgba(255,255,255,0.04); }
-            50% { opacity: 1; box-shadow: 0 0 14px 2px rgba(255,255,255,0.12); }
+            0%, 100% { opacity: 0.25; }
+            50% { opacity: 0.7; }
           }
-          .mobile-cards::-webkit-scrollbar { display: none; }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+          }
         `}</style>
         <div style={{ width: '100%', maxWidth: 560, padding: '0 0 24px' }}>
           {/* ── JARVIS BRIEFING ── */}
@@ -592,23 +707,24 @@ export default function FeedPage() {
               <>
                 <div style={{ padding: '28px 20px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.4, marginBottom: 5 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#334155', marginBottom: 5 }}>
                       {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}
                     </div>
-                    <h1 style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-0.03em', margin: 0, color: 'var(--main-text-color, #e0e0e0)' }}>
-                      {greet} <span style={{ color: 'var(--accent, #ffffff)' }}>{currentUser?.username || 'there'}.</span>
+                    <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', margin: 0, color: '#e2e8f0' }}>
+                      {greet} <span style={{ background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{currentUser?.username || 'there'}.</span>
                     </h1>
                   </div>
-                  <button onClick={() => router.push('/discover')} style={{ background: 'var(--bg-elevated, #111111)', border: '1px solid var(--bg-border, #1a1a1a)', borderRadius: 11, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--secondary-text-color, #9CA3AF)', cursor: 'pointer', flexShrink: 0, marginTop: 4 }}>
+                  <button onClick={() => router.push('/discover')} style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.15)', borderRadius: 12, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', flexShrink: 0, marginTop: 4, transition: 'all 0.2s' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.15)'; e.currentTarget.style.color = '#a78bfa'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; e.currentTarget.style.color = '#475569'; }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                   </button>
                 </div>
 
                 {/* Day 1 card */}
-                <div style={{ margin: '18px 16px 0', borderRadius: 22, overflow: 'hidden', background: 'var(--bg-card, #0c0c0c)', border: '1px solid var(--bg-border, #1a1a1a)', position: 'relative' }}>
-                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)' }} />
-                  {/* Ambient glow */}
-                  <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 300, height: 200, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(255,255,255,0.02) 0%, transparent 70%)', pointerEvents: 'none' }} />
+                <div style={{ margin: '18px 16px 0', borderRadius: 20, overflow: 'hidden', background: '#0d0d14', border: '1px solid rgba(124,58,237,0.15)', position: 'relative' }}>
+                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(124,58,237,0.5), rgba(167,139,250,0.3), transparent)' }} />
+                  <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', width: 300, height: 200, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(124,58,237,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
                   {/* Progress bar */}
                   {(() => {
@@ -617,25 +733,24 @@ export default function FeedPage() {
                     return (
                       <div style={{ padding: '14px 20px 0' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.4 }}>Getting started</span>
-                          <span style={{ fontSize: 10, color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.4 }}>{done}/2</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#334155' }}>Getting started</span>
+                          <span style={{ fontSize: 10, color: '#334155' }}>{done}/2</span>
                         </div>
-                        <div style={{ height: 3, background: 'var(--bg-elevated, #111)', borderRadius: 2, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#22c55e' : 'var(--main-text-color, #e0e0e0)', borderRadius: 2, transition: 'width 0.5s ease' }} />
+                        <div style={{ height: 3, background: 'rgba(124,58,237,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#22c55e' : 'linear-gradient(90deg,#7c3aed,#a78bfa)', borderRadius: 2, transition: 'width 0.5s ease' }} />
                         </div>
                       </div>
                     );
                   })()}
 
                   <div style={{ padding: '24px 26px 28px', position: 'relative', textAlign: 'center' }}>
-                    <h2 style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-0.03em', color: 'var(--main-text-color, #e0e0e0)', lineHeight: 1.25, margin: '0 0 8px' }}>
+                    <h2 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: '#e2e8f0', lineHeight: 1.25, margin: '0 0 8px' }}>
                       Everyone starts somewhere.
                     </h2>
-                    <p style={{ fontSize: 14, color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.5, lineHeight: 1.6, margin: '0 0 24px', maxWidth: 280, marginLeft: 'auto', marginRight: 'auto' }}>
+                    <p style={{ fontSize: 14, color: '#334155', lineHeight: 1.6, margin: '0 0 24px', maxWidth: 280, marginLeft: 'auto', marginRight: 'auto' }}>
                       Today is Day 1. No history, no streak, no pressure. Just start.
                     </p>
 
-                    {/* Checklist */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24, textAlign: 'left' }}>
                       {[
                         { label: 'Write your first diary entry', done: diaryEntries.length > 0, href: '/diary/new' },
@@ -643,42 +758,39 @@ export default function FeedPage() {
                       ].map((item, i) => (
                         <div key={i} onClick={() => !item.done && router.push(item.href)} style={{
                           display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                          background: 'var(--bg-elevated, #111)', borderRadius: 14,
-                          border: `1px solid ${item.done ? 'rgba(34,197,94,0.2)' : 'var(--bg-border, #1a1a1a)'}`,
+                          background: 'rgba(124,58,237,0.05)', borderRadius: 14,
+                          border: `1px solid ${item.done ? 'rgba(34,197,94,0.2)' : 'rgba(124,58,237,0.12)'}`,
                           cursor: item.done ? 'default' : 'pointer', transition: 'all 0.15s',
                         }}
-                        onMouseEnter={e => { if (!item.done) e.currentTarget.style.borderColor = '#444'; }}
-                        onMouseLeave={e => { if (!item.done) e.currentTarget.style.borderColor = 'var(--bg-border, #1a1a1a)'; }}>
-                          {/* Checkbox */}
+                        onMouseEnter={e => { if (!item.done) { e.currentTarget.style.borderColor = 'rgba(124,58,237,0.35)'; e.currentTarget.style.background = 'rgba(124,58,237,0.1)'; }}}
+                        onMouseLeave={e => { if (!item.done) { e.currentTarget.style.borderColor = 'rgba(124,58,237,0.12)'; e.currentTarget.style.background = 'rgba(124,58,237,0.05)'; }}}>
                           <div style={{
                             width: 22, height: 22, borderRadius: 7, flexShrink: 0,
                             background: item.done ? '#22c55e' : 'transparent',
-                            border: `2px solid ${item.done ? '#22c55e' : 'var(--secondary-text-color, #9CA3AF)'}`,
+                            border: `2px solid ${item.done ? '#22c55e' : 'rgba(124,58,237,0.3)'}`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            opacity: item.done ? 1 : 0.3, transition: 'all 0.2s',
+                            transition: 'all 0.2s',
                           }}>
                             {item.done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
                           </div>
                           <span style={{
                             fontSize: 14, fontWeight: 600,
-                            color: item.done ? '#22c55e' : 'var(--main-text-color, #e0e0e0)',
+                            color: item.done ? '#22c55e' : '#94a3b8',
                             textDecoration: item.done ? 'line-through' : 'none',
-                            opacity: item.done ? 0.5 : 1,
-                            transition: 'all 0.2s',
+                            opacity: item.done ? 0.6 : 1, transition: 'all 0.2s',
                           }}>{item.label}</span>
-                          {!item.done && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--secondary-text-color, #9CA3AF)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto', opacity: 0.3 }}><polyline points="9 18 15 12 9 6"/></svg>}
+                          {!item.done && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 'auto' }}><polyline points="9 18 15 12 9 6"/></svg>}
                         </div>
                       ))}
                     </div>
-
                   </div>
                 </div>
 
                 {/* Feed divider */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '22px 20px 0', marginBottom: 16 }}>
-                  <div style={{ flex: 1, height: 1, background: 'var(--bg-border, #1a1a1a)' }} />
-                  <span style={{ fontSize: 9, color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.3, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>From Same Here</span>
-                  <div style={{ flex: 1, height: 1, background: 'var(--bg-border, #1a1a1a)' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 0', marginBottom: 14 }}>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(124,58,237,0.1)' }} />
+                  <span style={{ fontSize: 9, color: '#334155', fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>From Same Here</span>
+                  <div style={{ flex: 1, height: 1, background: 'rgba(124,58,237,0.1)' }} />
                 </div>
               </>
             );
@@ -686,100 +798,128 @@ export default function FeedPage() {
             return (
               <>
                 {/* Header */}
-                <div style={{ padding: '28px 20px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.4, marginBottom: 5 }}>
+                <motion.div
+                  variants={staggerContainer} initial="hidden" animate="visible"
+                  style={{ padding: '28px 20px 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}
+                >
+                  <motion.div variants={fadeUp}>
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#334155', marginBottom: 5 }}>
                       {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase()}
                     </div>
-                    <h1 style={{ fontSize: 26, fontWeight: 900, letterSpacing: '-0.03em', margin: 0, color: 'var(--main-text-color, #e0e0e0)' }}>
-                      {greet} <span style={{ color: 'var(--accent, #ffffff)' }}>{currentUser?.username || 'there'}.</span>
+                    <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', margin: 0, color: '#e2e8f0' }}>
+                      {greet} <span style={{ background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{currentUser?.username || 'there'}.</span>
                     </h1>
-                  </div>
-                  <button onClick={() => router.push('/discover')} style={{ background: 'var(--bg-elevated, #111111)', border: '1px solid var(--bg-border, #1a1a1a)', borderRadius: 11, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--secondary-text-color, #9CA3AF)', cursor: 'pointer', flexShrink: 0, marginTop: 4 }}>
+                  </motion.div>
+                  <motion.button variants={fadeUp} whileHover={{ scale: 1.1, rotate: 8 }} whileTap={{ scale: 0.92 }} onClick={() => router.push('/discover')}
+                    style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.15)', borderRadius: 12, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', cursor: 'pointer', flexShrink: 0, marginTop: 4, transition: 'color 0.2s, background 0.2s' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#a78bfa'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#475569'; }}
+                  >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                  </button>
-                </div>
+                  </motion.button>
+                </motion.div>
 
                 {/* Jarvis scan line */}
                 {jarvisLine ? (
-                  <div style={{ padding: '4px 22px 0' }}>
+                  <motion.div
+                    initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.25, duration: 0.5, ease: [0.22,1,0.36,1] }}
+                    style={{ padding: '8px 22px 0' }}
+                  >
                     <p style={{
-                      fontSize: 19, fontWeight: 900, letterSpacing: '-0.025em', lineHeight: 1.35, margin: 0,
-                      background: 'linear-gradient(135deg, #fff 0%, #444 100%)',
+                      fontSize: 18, fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.35, margin: 0,
+                      background: 'linear-gradient(135deg, #e2e8f0 0%, #475569 100%)',
                       WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
                     }}>{jarvisLine}</p>
-                  </div>
+                  </motion.div>
                 ) : null}
 
                 {/* Briefing */}
                 {attentionCount > 0 ? (
-                  <div style={{ margin: '18px 16px 0', padding: '20px 22px', background: 'var(--bg-card,#0c0c0c)', borderRadius: 20, border: `1px solid ${accentColor}18`, position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,${accentColor}99,${accentColor}20,transparent)` }} />
-                    <div style={{ position:'absolute', top:-30, left:-30, width:160, height:160, borderRadius:'50%', background:`radial-gradient(circle,${accentColor}08,transparent 70%)`, pointerEvents:'none' }} />
-                    {/* Headline */}
-                    <div style={{ fontSize:26, fontWeight:900, letterSpacing:'-0.035em', color:'var(--main-text-color,#e0e0e0)', lineHeight:1.15, marginBottom:2 }}>{headline}</div>
-                    <div style={{ fontSize:26, fontWeight:900, letterSpacing:'-0.035em', color:accentColor, lineHeight:1.15, marginBottom:14 }}>{headlineAccent}</div>
-                    {/* CTA */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 14, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ delay: 0.3, duration: 0.45, ease: [0.22,1,0.36,1] }}
+                    style={{ margin: '16px 16px 0', padding: '18px 20px', background: 'rgba(13,13,20,0.95)', borderRadius: 18, border: `1px solid ${accentColor}22`, position: 'relative', overflow: 'hidden' }}
+                  >
+                    <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,${accentColor}88,${accentColor}22,transparent)`, borderRadius: '18px 18px 0 0' }} />
+                    <div style={{ position:'absolute', top:-40, left:-40, width:160, height:160, borderRadius:'50%', background:`radial-gradient(circle,${accentColor}07,transparent 70%)`, pointerEvents:'none' }} />
+                    <motion.div initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.4, duration:0.4 }}>
+                      <div style={{ fontSize:24, fontWeight:800, letterSpacing:'-0.03em', color:'#e2e8f0', lineHeight:1.2, marginBottom:2 }}>{headline}</div>
+                      <div style={{ fontSize:24, fontWeight:800, letterSpacing:'-0.03em', color:accentColor, lineHeight:1.2, marginBottom:14 }}>{headlineAccent}</div>
+                    </motion.div>
                     {(() => {
                       const primaryItem = items.find(i => i.href);
                       if (!primaryItem) return null;
                       const ctaLabel = !wroteToday ? "Write today's entry" : 'Go to tasks';
                       return (
-                        <div onClick={() => router.push(primaryItem.href)}
-                          style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'9px 18px', background:`${accentColor}10`, border:`1px solid ${accentColor}30`, borderRadius:20, cursor:'pointer', transition:'all 0.15s' }}
-                          onMouseEnter={e => { e.currentTarget.style.background=`${accentColor}20`; e.currentTarget.style.borderColor=`${accentColor}55`; }}
-                          onMouseLeave={e => { e.currentTarget.style.background=`${accentColor}10`; e.currentTarget.style.borderColor=`${accentColor}30`; }}>
-                          <span style={{ fontSize:13, fontWeight:800, color:accentColor }}>{ctaLabel}</span>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                        </div>
+                        <motion.div
+                          initial={{ opacity:0, x:-8 }} animate={{ opacity:1, x:0 }} transition={{ delay:0.5, duration:0.35 }}
+                          onClick={() => router.push(primaryItem.href)}
+                          whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                          style={{ display:'inline-flex', alignItems:'center', gap:7, padding:'8px 16px', background:`${accentColor}0e`, border:`1px solid ${accentColor}28`, borderRadius:20, cursor:'pointer', transition:'background 0.15s, border-color 0.15s' }}
+                          onMouseEnter={e => { e.currentTarget.style.background=`${accentColor}1c`; e.currentTarget.style.borderColor=`${accentColor}50`; }}
+                          onMouseLeave={e => { e.currentTarget.style.background=`${accentColor}0e`; e.currentTarget.style.borderColor=`${accentColor}28`; }}
+                        >
+                          <span style={{ fontSize:12, fontWeight:700, color:accentColor }}>{ctaLabel}</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={accentColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                        </motion.div>
                       );
                     })()}
-                  </div>
+                  </motion.div>
                 ) : (
-                  <div style={{ padding: '14px 22px 0' }}>
-                    <div style={{ fontSize:24, fontWeight:900, letterSpacing:'-0.035em', color:'var(--main-text-color,#e0e0e0)', lineHeight:1.15, marginBottom:2 }}>{headline}</div>
-                    <div style={{ fontSize:24, fontWeight:900, letterSpacing:'-0.035em', color:accentColor, lineHeight:1.15 }}>{headlineAccent}</div>
-                  </div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3, duration: 0.4 }}
+                    style={{ padding: '12px 22px 0' }}
+                  >
+                    <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-0.03em', color:'#e2e8f0', lineHeight:1.2, marginBottom:2 }}>{headline}</div>
+                    <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-0.03em', color:accentColor, lineHeight:1.2 }}>{headlineAccent}</div>
+                  </motion.div>
                 )}
 
                 {/* Stat cards */}
-                <div style={{ display: 'flex', gap: 10, padding: '12px 16px 0' }}>
+                <motion.div
+                  variants={staggerContainer} initial="hidden" animate="visible"
+                  style={{ display: 'flex', gap: 8, padding: '12px 16px 0' }}
+                >
                   {[
-                    { val: wroteToday ? '✓' : '0', label: 'diary today', color: wroteToday ? '#22c55e' : '#f87171' },
-                    { val: `${todayDone}/${todayTodos.length || 0}`, label: 'tasks done', color: todayDone === todayTodos.length && todayTodos.length > 0 ? '#22c55e' : '#facc15' },
-                    { val: `🔥${streak}`, label: 'day streak', color: '#22c55e' },
+                    { val: wroteToday ? '✓' : '—', label: 'diary today', color: wroteToday ? '#22c55e' : '#f43f5e' },
+                    { val: `${todayDone}/${todayTodos.length || 0}`, label: 'tasks done', color: todayDone === todayTodos.length && todayTodos.length > 0 ? '#22c55e' : '#f59e0b' },
+                    { val: streak > 0 ? `${streak}` : '0', label: `day streak${streak > 0 ? ' 🔥' : ''}`, color: streak > 0 ? '#a78bfa' : '#334155' },
                   ].map((s, i) => (
-                    <div key={i} style={{ flex: 1, background: 'var(--bg-card, #0c0c0c)', border: '1px solid var(--bg-border, #1a1a1a)', borderRadius: 14, padding: '12px 10px', position: 'relative', overflow: 'hidden' }}>
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${s.color}80, transparent)` }} />
-                      {/* Watermark icon */}
-                      {s.icon && <div style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', color: s.color, opacity: 0.08, display: 'flex' }}>{s.icon}</div>}
-                      <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.03em', color: s.color, lineHeight: 1, marginBottom: 3 }}>{s.val}</div>
-                      <div style={{ fontSize: 9, color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.4, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{s.label}</div>
-                    </div>
+                    <motion.div key={i} variants={fadeUp}
+                      whileHover={{ y: -2, scale: 1.03 }} transition={{ type: 'spring', stiffness: 400, damping: 24 }}
+                      style={{ flex: 1, background: 'rgba(13,13,20,0.9)', border: '1px solid rgba(124,58,237,0.1)', borderRadius: 14, padding: '12px 10px', position: 'relative', overflow: 'hidden', cursor: 'default' }}
+                    >
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${s.color}55, transparent)` }} />
+                      <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.03em', color: s.color, lineHeight: 1, marginBottom: 4 }}>{s.val}</div>
+                      <div style={{ fontSize: 9, color: '#334155', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</div>
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
 
                 {/* Quote */}
-                <div style={{ margin: '16px 16px 0', position: 'relative', padding: '28px 24px', textAlign: 'center', overflow: 'hidden' }}>
-                  {/* Ambient blob */}
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 280, height: 100, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(255,255,255,0.03) 0%, transparent 70%)', pointerEvents: 'none' }} />
-                  {/* Left accent line */}
-                  <div style={{ position: 'absolute', left: 0, top: '10%', bottom: '10%', width: 2, borderRadius: 2, background: 'linear-gradient(180deg, transparent, var(--main-text-color,#e0e0e0), transparent)', opacity: 0.35 }} />
-                  {/* Right accent line */}
-                  <div style={{ position: 'absolute', right: 0, top: '10%', bottom: '10%', width: 2, borderRadius: 2, background: 'linear-gradient(180deg, transparent, var(--main-text-color,#e0e0e0), transparent)', opacity: 0.35 }} />
+                <motion.div
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.6 }}
+                  style={{ margin: '14px 16px 0', position: 'relative', padding: '20px 20px', textAlign: 'center', overflow: 'hidden', background: 'rgba(124,58,237,0.04)', borderRadius: 16, border: '1px solid rgba(124,58,237,0.08)' }}
+                >
+                  <motion.div
+                    style={{ position: 'absolute', left: 0, top: '15%', bottom: '15%', width: 2, background: 'linear-gradient(180deg,transparent,rgba(124,58,237,0.5),transparent)', borderRadius: 2 }}
+                    animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  />
                   <p style={{
-                    fontSize: 19, fontWeight: 900, margin: 0, lineHeight: 1.4,
-                    letterSpacing: '-0.03em', position: 'relative',
-                    background: 'linear-gradient(135deg, var(--main-text-color, #e0e0e0) 30%, var(--secondary-text-color, #9CA3AF) 100%)',
+                    fontSize: 15, fontWeight: 700, margin: 0, lineHeight: 1.55,
+                    letterSpacing: '-0.015em', position: 'relative',
+                    background: 'linear-gradient(135deg, #94a3b8 30%, #475569 100%)',
                     WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
                   }}>"{subLine}"</p>
-                </div>
+                </motion.div>
 
                 {/* Feed divider */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '22px 20px 0', marginBottom: 16 }}>
-                  <div style={{ flex: 1, height: 1, background: 'var(--bg-border, #1a1a1a)' }} />
-                  <span style={{ fontSize: 9, color: 'var(--secondary-text-color, #9CA3AF)', opacity: 0.3, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>From Same Here</span>
-                  <div style={{ flex: 1, height: 1, background: '#0e0e0e' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '20px 20px 0', marginBottom: 14 }}>
+                  <motion.div animate={{ opacity: [0.2, 0.6, 0.2] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }} style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, rgba(124,58,237,0.4))' }} />
+                  <span style={{ fontSize: 9, color: '#334155', fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>From Same Here</span>
+                  <motion.div animate={{ opacity: [0.2, 0.6, 0.2] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }} style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, rgba(124,58,237,0.4))' }} />
                 </div>
               </>
             );
@@ -787,56 +927,64 @@ export default function FeedPage() {
 
           <div style={{ padding: '0 16px' }}>
           {loading ? (
-            <p style={{ color: '#333', textAlign: 'center', marginTop: 40 }}>Loading...</p>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+              <div style={{ width: 28, height: 28, border: '2px solid rgba(124,58,237,0.15)', borderTopColor: '#7c3aed', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            </div>
           ) : (
           <>
             {/* No following — prompt to follow people */}
             {entries.length === 0 && exploreEntries.length > 0 && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 14,
-                padding: '14px 16px', marginBottom: 20,
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 14,
+                padding: '14px 16px', marginBottom: 16,
+                background: 'rgba(124,58,237,0.06)',
+                border: '1px solid rgba(124,58,237,0.15)',
+                borderRadius: 16,
               }}>
-                <div style={{ fontSize: 22 }}>👋</div>
+                <div style={{ fontSize: 20 }}>👋</div>
                 <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: '#e0e0e0' }}>Go find the person living your day.</p>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--secondary-text-color, #9CA3AF)' }}>You're seeing public posts for now</p>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>Find the person living your day.</p>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#475569' }}>Showing public posts for now</p>
                 </div>
                 <Link href="/discover" style={{
-                  background: '#fff', color: '#000',
-                  fontSize: 12, fontWeight: 700,
+                  background: 'linear-gradient(135deg,#7c3aed,#6d28d9)',
+                  color: '#fff', fontSize: 12, fontWeight: 700,
                   padding: '7px 14px', borderRadius: 20,
                   textDecoration: 'none', whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 12px rgba(109,40,217,0.3)',
                 }}>Find people</Link>
               </div>
             )}
 
             {entries.length === 0 && exploreEntries.length === 0 && (
               <div style={{ textAlign: 'center', marginTop: 60 }}>
-                <p style={{ fontSize: 16, fontWeight: 600 }}>Nothing here yet</p>
-                <Link href="/new-entry" style={{ display: 'inline-block', marginTop: 16, background: '#fff', color: '#000', padding: '10px 24px', borderRadius: 12, fontWeight: 700, textDecoration: 'none' }}>Post Your Day</Link>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#475569' }}>Nothing here yet</p>
+                <Link href="/new-entry" style={{ display: 'inline-block', marginTop: 16, background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: '#fff', padding: '10px 24px', borderRadius: 12, fontWeight: 700, textDecoration: 'none', boxShadow: '0 4px 20px rgba(109,40,217,0.3)' }}>Post Your Day</Link>
               </div>
             )}
 
-            {entries.map(e => (
-              <EntryCard key={e.id} entry={e} onLike={handleLike} onDelete={handleDelete} onEdit={handleEdit} currentUserId={currentUser?.id} />
-            ))}
+            <AnimatePresence>
+              <motion.div variants={staggerContainer} initial="hidden" animate="visible">
+                {entries.map((e) => (
+                  <EntryCard key={e.id} entry={e} onLike={handleLike} onDelete={handleDelete} onEdit={handleEdit} currentUserId={currentUser?.id} />
+                ))}
+              </motion.div>
+            </AnimatePresence>
 
             {exploreEntries.length > 0 && (
               <>
-                <div style={{ margin: '32px 0 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: '100%', height: 1,
-                    background: 'linear-gradient(to right, transparent, #ffffff18, #ffffff35, #ffffff18, transparent)',
-                    animation: 'linePulse 3s ease-in-out infinite',
-                  }} />
-                  <span style={{ color: '#333', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase' }}>More from Same Here</span>
+                <div style={{ margin: '28px 0 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(to right, transparent, rgba(124,58,237,0.3))', animation: 'linePulse 3s ease-in-out infinite' }} />
+                  <span style={{ color: '#4b3a6e', fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>More from Same Here</span>
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(to left, transparent, rgba(124,58,237,0.3))', animation: 'linePulse 3s ease-in-out infinite' }} />
                 </div>
-                {exploreEntries.map(e => (
-                  <EntryCard key={e.id} entry={e} onLike={handleLike} onDelete={handleDelete} onEdit={handleEdit} currentUserId={currentUser?.id} />
-                ))}
+                <AnimatePresence>
+                  <motion.div variants={staggerContainer} initial="hidden" animate="visible">
+                    {exploreEntries.map((e) => (
+                      <EntryCard key={e.id} entry={e} onLike={handleLike} onDelete={handleDelete} onEdit={handleEdit} currentUserId={currentUser?.id} />
+                    ))}
+                  </motion.div>
+                </AnimatePresence>
               </>
             )}
           </>
@@ -848,21 +996,23 @@ export default function FeedPage() {
       {/* ── DAILY JARVIS GREETING ── */}
       {showDailyGreet && currentUser && (
         <div onClick={() => { setShowDailyGreet(false); localStorage.setItem('samehere_greeted', new Date().toLocaleDateString('en-CA')); }}
-          style={{ position:'fixed', inset:0, background:'#060606', zIndex:999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
+          style={{ position:'fixed', inset:0, background:'#07070b', zIndex:999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
           <style>{`
-            @keyframes jg1 { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-            @keyframes jg2 { from{opacity:0;transform:translateY(8px)} to{opacity:0.55;transform:translateY(0)} }
-            @keyframes jg3 { from{opacity:0;transform:translateY(8px)} to{opacity:0.3;transform:translateY(0)} }
-            @keyframes jgfade { 0%,75%{opacity:1} 100%{opacity:0} }
-            .jgl1 { animation: jg1 0.5s ease-out 0.2s both, jgfade 4s ease-out forwards; }
-            .jgl2 { animation: jg2 0.5s ease-out 0.9s both, jgfade 4s ease-out forwards; }
-            .jgl3 { animation: jg3 0.5s ease-out 1.6s both, jgfade 4s ease-out forwards; }
+            @keyframes jg1 { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+            @keyframes jg2 { from{opacity:0;transform:translateY(10px)} to{opacity:0.6;transform:translateY(0)} }
+            @keyframes jg3 { from{opacity:0;transform:translateY(10px)} to{opacity:0.35;transform:translateY(0)} }
+            @keyframes jgfade { 0%,70%{opacity:1} 100%{opacity:0} }
+            .jgl1 { animation: jg1 0.55s ease-out 0.2s both, jgfade 4s ease-out forwards; }
+            .jgl2 { animation: jg2 0.55s ease-out 0.85s both, jgfade 4s ease-out forwards; }
+            .jgl3 { animation: jg3 0.55s ease-out 1.5s both, jgfade 4s ease-out forwards; }
             .jg-cursor { animation: jgblink 1s step-end infinite; }
             @keyframes jgblink { 0%,100%{opacity:1} 50%{opacity:0} }
           `}</style>
 
-          {/* Subtle scan line */}
-          <div style={{ position:'absolute', top:0, left:0, right:0, height:1, background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent)', animation:'jg1 0.5s ease-out both' }} />
+          {/* violet top scan line */}
+          <div style={{ position:'absolute', top:0, left:0, right:0, height:1, background:'linear-gradient(90deg,transparent,rgba(124,58,237,0.5),rgba(167,139,250,0.3),transparent)', animation:'jg1 0.5s ease-out both' }} />
+          {/* ambient glow */}
+          <div style={{ position:'absolute', top:'30%', left:'50%', transform:'translateX(-50%)', width:400, height:400, borderRadius:'50%', background:'radial-gradient(circle, rgba(109,40,217,0.08) 0%, transparent 70%)', pointerEvents:'none' }} />
 
           {(() => {
             const h = new Date().getHours();
@@ -880,17 +1030,17 @@ export default function FeedPage() {
               : `I've been expecting you.`;
             return (
               <div style={{ textAlign:'center', padding:'0 40px', fontFamily:"'SF Mono', Monaco, monospace" }}>
-                <p className="jgl1" style={{ fontSize:13, color:'#555', fontWeight:700, letterSpacing:'0.15em', textTransform:'uppercase', margin:'0 0 28px' }}>SYSTEM ONLINE</p>
-                <p className="jgl1" style={{ fontSize:30, fontWeight:900, letterSpacing:'-0.02em', color:'#fff', margin:'0 0 14px', lineHeight:1.2, fontFamily:'inherit' }}>
-                  {greetLine}, <span style={{ color:'#7c9cf8' }}>{currentUser.username}.</span>
+                <p className="jgl1" style={{ fontSize:11, color:'#4b3a6e', fontWeight:700, letterSpacing:'0.18em', textTransform:'uppercase', margin:'0 0 32px' }}>SYSTEM ONLINE</p>
+                <p className="jgl1" style={{ fontSize:30, fontWeight:800, letterSpacing:'-0.025em', color:'#e2e8f0', margin:'0 0 14px', lineHeight:1.2, fontFamily:'inherit' }}>
+                  {greetLine}, <span style={{ background:'linear-gradient(135deg,#a78bfa,#7c3aed)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text' }}>{currentUser.username}.</span>
                 </p>
-                <p className="jgl2" style={{ fontSize:15, fontWeight:600, color:'#fff', margin:'0 0 10px', letterSpacing:'0.02em', fontFamily:'inherit' }}>{line2}</p>
-                <p className="jgl3" style={{ fontSize:12, color:'#fff', margin:0, letterSpacing:'0.1em', textTransform:'uppercase', fontFamily:'inherit' }}>Initiating daily scan<span className="jg-cursor">_</span></p>
+                <p className="jgl2" style={{ fontSize:15, fontWeight:600, color:'#94a3b8', margin:'0 0 10px', letterSpacing:'0.01em', fontFamily:'inherit' }}>{line2}</p>
+                <p className="jgl3" style={{ fontSize:11, color:'#94a3b8', margin:0, letterSpacing:'0.12em', textTransform:'uppercase', fontFamily:'inherit' }}>Initiating daily scan<span className="jg-cursor" style={{ color:'#7c3aed' }}>_</span></p>
               </div>
             );
           })()}
 
-          <p style={{ position:'absolute', bottom:40, fontSize:10, color:'#252525', letterSpacing:'0.1em', textTransform:'uppercase', fontFamily:"'SF Mono', Monaco, monospace" }}>TAP TO SKIP</p>
+          <p style={{ position:'absolute', bottom:40, fontSize:10, color:'#1e1b2e', letterSpacing:'0.12em', textTransform:'uppercase', fontFamily:"'SF Mono', Monaco, monospace" }}>TAP TO SKIP</p>
         </div>
       )}
 
