@@ -6,6 +6,42 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff } from "lucide-react";
 import { NetworkBackground } from "@/components/NetworkBackground";
 
+/* ─── Typewriter ──────────────────────────────────────────── */
+function Typewriter({ texts, speed = 65, deleteSpeed = 35, pause = 2000 }: {
+  texts: string[]; speed?: number; deleteSpeed?: number; pause?: number;
+}) {
+  const [displayed, setDisplayed] = useState('');
+  const [idx, setIdx] = useState(0);
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    const current = texts[idx % texts.length];
+    if (!deleting && displayed.length < current.length) {
+      const t = setTimeout(() => setDisplayed(current.slice(0, displayed.length + 1)), speed);
+      return () => clearTimeout(t);
+    }
+    if (!deleting && displayed.length === current.length) {
+      const t = setTimeout(() => setDeleting(true), pause);
+      return () => clearTimeout(t);
+    }
+    if (deleting && displayed.length > 0) {
+      const t = setTimeout(() => setDisplayed(displayed.slice(0, -1)), deleteSpeed);
+      return () => clearTimeout(t);
+    }
+    if (deleting && displayed.length === 0) {
+      setDeleting(false);
+      setIdx(i => i + 1);
+    }
+  }, [displayed, deleting, idx, texts, speed, deleteSpeed, pause]);
+
+  return (
+    <span>
+      {displayed}
+      <span style={{ opacity: 0.7, animation: 'sh-blink 1s step-end infinite' }}>|</span>
+    </span>
+  );
+}
+
 /* ─── Animated clock ─────────────────────────────────────── */
 function ClockLogo({ size = 112 }: { size?: number }) {
   const [time, setTime] = useState(new Date());
@@ -175,6 +211,9 @@ export function AuthUI({ onSignIn, onSignUp, error, loading }: AuthUIProps) {
         @keyframes spin {
           to{transform:rotate(360deg)}
         }
+        @keyframes sh-blink {
+          0%,100%{opacity:1}50%{opacity:0}
+        }
 
         /* ── base (mobile-first: ≤480px) ── */
         .sh-form{display:flex;flex-direction:column;gap:14px}
@@ -261,7 +300,7 @@ export function AuthUI({ onSignIn, onSignUp, error, loading }: AuthUIProps) {
         }
         .sh-hero-sub{
           font-size:clamp(11px,3vw,13px);
-          color:#4b5563;margin:0 0 32px;letter-spacing:0.02em;
+          color:#4b5563;margin:0 0 12px;letter-spacing:0.02em;
         }
         .sh-btn-row{
           display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
@@ -429,6 +468,35 @@ export function AuthUI({ onSignIn, onSignUp, error, loading }: AuthUIProps) {
             transition={{ delay: 0.35, duration: 0.5 }}
           >
             How do you choose to fill yours?
+          </motion.p>
+
+          {/* typewriter greeting */}
+          <motion.p
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.5 }}
+            style={{
+              fontFamily: "'Crimson Pro', Georgia, serif",
+              fontSize: 'clamp(14px, 4vw, 17px)',
+              fontStyle: 'italic',
+              color: '#6d28d9',
+              margin: '0 0 28px',
+              minHeight: '1.5em',
+              letterSpacing: '0.01em',
+            }}
+          >
+            <Typewriter
+              texts={[
+                'Welcome back. The journey continues.',
+                'Every day is a fresh 24 hours.',
+                'Small habits build great lives.',
+                'Your story is worth documenting.',
+                'Consistency is the real superpower.',
+              ]}
+              speed={55}
+              deleteSpeed={30}
+              pause={2200}
+            />
           </motion.p>
 
           <motion.div
